@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_SHA256_H
-#define HEADER_CURL_SHA256_H
+#ifndef HEADER_CURL_HTTP_V4_SIGNATURE_H
+#define HEADER_CURL_HTTP_V4_SIGNATURE_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -7,7 +7,7 @@
  *                            | (__| |_| |  _ <| |___
  *                             \___|\___/|_| \_\_____|
  *
- * Copyright (C) 1998 - 2019, Florin Petriuc, <petriuc.florin@gmail.com>
+ * Copyright (C) 1998 - 2020, Daniel Stenberg, <daniel@haxx.se>, et al.
  *
  * This software is licensed as described in the file COPYING, which
  * you should have received as part of this distribution. The terms
@@ -21,15 +21,9 @@
  * KIND, either express or implied.
  *
  ***************************************************************************/
+#include "curl_setup.h"
 
-#ifndef CURL_DISABLE_CRYPTO_AUTH
-#include "curl_hmac.h"
+/* this is for creating v4_signature header output */
+CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy);
 
-extern const HMAC_params Curl_HMAC_SHA256[1];
-
-void Curl_sha256it(unsigned char *outbuffer,
-                const unsigned char *input);
-
-#endif
-
-#endif /* HEADER_CURL_SHA256_H */
+#endif /* HEADER_CURL_HTTP_V4_SIGNATURE_H */
