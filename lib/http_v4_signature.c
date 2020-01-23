@@ -60,10 +60,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   CURLcode ret = CURLE_FAILED_INIT;
   char sk[45]; /* secret key is 40 chat long + 'OSC' + \0 */
   struct Curl_easy *data = conn->data;
-  /* char *url = strdup(data->set.str[STRING_SET_URL]); */
   const char *surl = strstr(data->set.str[STRING_SET_URL], "://") + 3;
   char *host;
-  /* char *savptr = NULL; */
   struct tm *info;
   time_t rawtime;
   char *region;
@@ -72,7 +70,6 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char date[9];
   char date_str[64];
   unsigned char *post_data = data->set.postfields;
-  /* curl_off_t post_size = data->set.postfieldsize; */
   unsigned char sha_d[32];
   char sha_str[65];
   char *cred_scope;
@@ -83,6 +80,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   unsigned char tmp_sign1[32];
   char *auth;
   void *tmp;
+  int i;
 
   if(Curl_checkheaders(conn, "Authorization")) {
     goto exit; /* header alerady present, what to do ? */
@@ -101,14 +99,11 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   host = strdup(surl);
   *strchr(host, '/') = 0;
 
-  /* printf("'%s' - '%s' - '%s\n", region, uri, host); */
-
   Curl_sha256it(sha_d, post_data);
-  for(int i = 0; i < 32; ++i) {
+  for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", sha_d[i]);
   }
   sha_str[64] = 0;
-  /* printf("sha str: %s\n", sha_str); */
 
   cred_scope = curl_maprintf("%s/%s/api/osc4_request", date, region);
   canonical_hdr = curl_maprintf(
@@ -125,11 +120,9 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
                      "POST",
                      uri, canonical_hdr, sha_str);
 
-  /* printf("%s\n%s\n%s\n", cred_scope, canonical_hdr, canonical_request); */
-
   tmp = canonical_request;
   Curl_sha256it(sha_d, tmp);
-  for(int i = 0; i < 32; ++i) {
+  for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", sha_d[i]);
   }
 
@@ -137,27 +130,26 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
                               "%s\n%s\n%s",
                               date_iso, cred_scope, sha_str);
 
-  /* printf("--\n%s\n", str_to_sign); */
-
   strcpy(sk, "OSC4");
   strncpy(sk + 4, data->set.str[STRING_PASSWORD], 40);
   sk[44] = 0;
 
-  hmac_sha256((uint8_t *)sk, 44, (uint8_t *)date, strlen(date), tmp_sign0);
-  for(int i = 0; i < 32; ++i) {
+  hmac_sha256((unsigned char *)sk, 44, (unsigned char *)date,
+              (unsigned int)strlen(date), tmp_sign0);
+  for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", tmp_sign0[i]);
   }
   sha_str[64] = 0;
-  /* printf("pass 0: %s\n", sha_str); */
 
-  hmac_sha256(tmp_sign0, 32, (void *)region, strlen(region), tmp_sign1);
+  hmac_sha256(tmp_sign0, 32, (void *)region,
+              (unsigned int)strlen(region), tmp_sign1);
   hmac_sha256(tmp_sign1, 32, (void *)"api", sizeof("api") -1, tmp_sign0);
   hmac_sha256(tmp_sign0, 32, (void *)"osc4_request", sizeof("osc4_request") -1,
               tmp_sign1);
-  hmac_sha256(tmp_sign1, 32, (void *)str_to_sign, strlen(str_to_sign),
-              tmp_sign0);
+  hmac_sha256(tmp_sign1, 32, (void *)str_to_sign,
+              (unsigned int)strlen(str_to_sign), tmp_sign0);
 
-  for(int i = 0; i < 32; ++i) {
+  for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", tmp_sign0[i]);
   }
   sha_str[64] = 0;
