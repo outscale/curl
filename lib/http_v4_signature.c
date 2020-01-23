@@ -60,6 +60,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   CURLcode ret = CURLE_FAILED_INIT;
   char sk[45]; /* secret key is 40 chat long + 'OSC' + \0 */
   struct Curl_easy *data = conn->data;
+  const char *customrequest = data->set.str[STRING_CUSTOMREQUEST];
   const char *surl = strstr(data->set.str[STRING_SET_URL], "://") + 3;
   char *host;
   struct tm *info;
@@ -71,6 +72,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char date_str[64];
   const unsigned char *post_data = data->set.postfields ?
     data->set.postfields : "";
+  const char *content_type;
   unsigned char sha_d[32];
   char sha_str[65];
   char *cred_scope;
@@ -84,8 +86,18 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   int i;
 
   if(Curl_checkheaders(conn, "Authorization")) {
-    goto exit; /* header alerady present, what to do ? */
+    /* Authorization alerady present, Bailing out */
+    goto exit;
   }
+
+  content_type = Curl_checkheaders(conn, "Content-Type");
+  if(!content_type) {
+    goto exit;
+  }
+  content_type = strchr(content_type, ':') + 1;
+  /* Skip whitespace now */
+  while (*content_type == ' ' || *content_type == '\t')
+    ++content_type;
 
   (void) proxy;
   time(&rawtime);
@@ -108,9 +120,9 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
 
   cred_scope = curl_maprintf("%s/%s/api/osc4_request", date, region);
   canonical_hdr = curl_maprintf(
-    "content-type:application/json; charset=utf-8\n"
+    "content-type:%s\n"
     "host:%s\n"
-    "x-osc-date:%s\n", host, date_iso);
+    "x-osc-date:%s\n", content_type, host, date_iso);
   canonical_request = curl_maprintf(
                      "%s\n" /* Methode */
                      "%s\n" /* uri */
@@ -118,7 +130,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
                      "%s\n" /* canonical_headers */
                      "content-type;host;x-osc-date\n" /* signed header */
                      "%s" /* SHA ! */,
-                     "POST",
+                     customrequest,
                      uri, canonical_hdr, sha_str);
 
   tmp = canonical_request;
