@@ -76,6 +76,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   unsigned char sha_d[32];
   char sha_str[65];
   char *cred_scope;
+  const char *signed_headers = "content-type;host;x-osc-date";
   char *canonical_hdr;
   char *canonical_request;
   char *str_to_sign;
@@ -128,10 +129,10 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
                      "%s\n" /* uri */
                      "\n" /* querystring ? */
                      "%s\n" /* canonical_headers */
-                     "content-type;host;x-osc-date\n" /* signed header */
+                     "%s\n" /* signed header */
                      "%s" /* SHA ! */,
                      customrequest,
-                     uri, canonical_hdr, sha_str);
+                     uri, canonical_hdr, signed_headers, sha_str);
 
   tmp = canonical_request;
   Curl_sha256it(sha_d, tmp);
@@ -168,11 +169,10 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   sha_str[64] = 0;
 
   auth = curl_maprintf("Authorization: OSC4-HMAC-SHA256 Credential=%s/%s, "
-                       "SignedHeaders=content-type;host;x-osc-date,"
+                       "SignedHeaders=%s,"
                        " Signature=%s",
-                       data->set.str[STRING_USERNAME], cred_scope, sha_str);
-
-  /* printf("ret: %s\n", auth); */
+                       data->set.str[STRING_USERNAME], cred_scope,
+                       signed_headers, sha_str);
 
   free(str_to_sign);
   free(canonical_hdr);
