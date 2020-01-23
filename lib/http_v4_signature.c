@@ -69,7 +69,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char date_iso[17];
   char date[9];
   char date_str[64];
-  unsigned char *post_data = data->set.postfields;
+  const unsigned char *post_data = data->set.postfields ?
+    data->set.postfields : "";
   unsigned char sha_d[32];
   char sha_str[65];
   char *cred_scope;
