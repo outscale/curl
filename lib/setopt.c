@@ -1615,6 +1615,13 @@ CURLcode Curl_vsetopt(struct Curl_easy *data, CURLoption option, va_list param)
                             va_arg(param, char *));
     break;
 #endif
+  case CURLOPT_V4_PROVIDER:
+    /*
+     * String that holds file type of the SSL certificate to use
+     */
+    result = Curl_setstropt(&data->set.str[STRING_V4_PROVIDER],
+                            va_arg(param, char *));
+    break;
   case CURLOPT_SSLCERTTYPE:
     /*
      * String that holds file type of the SSL certificate to use

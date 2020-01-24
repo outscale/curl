@@ -55,6 +55,8 @@ static CURLcode hmac_sha256(const unsigned char *key, unsigned int keylen,
   return CURLE_OK;
 }
 
+#define REGION_MAX_L 3
+
 CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
 {
   CURLcode ret = CURLE_FAILED_INIT;
@@ -65,6 +67,9 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char *host;
   struct tm *info;
   time_t rawtime;
+  char *low_provider = data->set.str[STRING_V4_PROVIDER];
+  char up_provider[REGION_MAX_L + 1];
+  char mid_provider[REGION_MAX_L + 1];
   char *region;
   char *uri;
   char date_iso[17];
@@ -76,14 +81,14 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   unsigned char sha_d[32];
   char sha_str[65];
   char *cred_scope;
-  const char *signed_headers = "content-type;host;x-osc-date";
+  char *signed_headers;
+  char request_type[REGION_MAX_L + sizeof("4_request")];
   char *canonical_hdr;
   char *canonical_request;
   char *str_to_sign;
   unsigned char tmp_sign0[32];
   unsigned char tmp_sign1[32];
   char *auth;
-  void *tmp;
   int i;
 
   if(Curl_checkheaders(conn, "Authorization")) {
@@ -97,8 +102,21 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   }
   content_type = strchr(content_type, ':') + 1;
   /* Skip whitespace now */
-  while (*content_type == ' ' || *content_type == '\t')
+  while(*content_type == ' ' || *content_type == '\t')
     ++content_type;
+
+  if(!low_provider || strlen(low_provider) > 3)
+    goto exit;
+
+  for(i = 0; low_provider[i]; ++i) {
+    if(!isalpha(low_provider[i]))
+      goto exit;
+    low_provider[i] = (char)tolower(low_provider[i]);
+    up_provider[i] = (char)toupper(low_provider[i]);
+    mid_provider[i] = (char)i ? low_provider[i] : up_provider[i];
+  }
+  up_provider[i] = 0;
+  mid_provider[i] = 0;
 
   (void) proxy;
   time(&rawtime);
@@ -119,11 +137,15 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   }
   sha_str[64] = 0;
 
-  cred_scope = curl_maprintf("%s/%s/api/osc4_request", date, region);
+  curl_msprintf(request_type, "%s4_request", low_provider);
+  cred_scope = curl_maprintf("%s/%s/api/%s", date, region, request_type);
   canonical_hdr = curl_maprintf(
     "content-type:%s\n"
     "host:%s\n"
-    "x-osc-date:%s\n", content_type, host, date_iso);
+    "x-%s-date:%s\n", content_type, host, low_provider, date_iso);
+
+  signed_headers = curl_maprintf("content-type;host;x-%s-date", low_provider);
+
   canonical_request = curl_maprintf(
                      "%s\n" /* Methode */
                      "%s\n" /* uri */
@@ -134,18 +156,16 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
                      customrequest,
                      uri, canonical_hdr, signed_headers, sha_str);
 
-  tmp = canonical_request;
-  Curl_sha256it(sha_d, tmp);
+  Curl_sha256it(sha_d, (unsigned char *)canonical_request);
   for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", sha_d[i]);
   }
 
-  str_to_sign = curl_maprintf("OSC4-HMAC-SHA256\n"
+  str_to_sign = curl_maprintf("%s4-HMAC-SHA256\n"
                               "%s\n%s\n%s",
-                              date_iso, cred_scope, sha_str);
+                              up_provider, date_iso, cred_scope, sha_str);
 
-  strcpy(sk, "OSC4");
-  strncpy(sk + 4, data->set.str[STRING_PASSWORD], 40);
+  curl_msprintf(sk, "%s4%s", up_provider, data->set.str[STRING_PASSWORD]);
   sk[44] = 0;
 
   hmac_sha256((unsigned char *)sk, 44, (unsigned char *)date,
@@ -158,7 +178,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   hmac_sha256(tmp_sign0, 32, (void *)region,
               (unsigned int)strlen(region), tmp_sign1);
   hmac_sha256(tmp_sign1, 32, (void *)"api", sizeof("api") -1, tmp_sign0);
-  hmac_sha256(tmp_sign0, 32, (void *)"osc4_request", sizeof("osc4_request") -1,
+  hmac_sha256(tmp_sign0, 32, (void *)request_type, sizeof("osc4_request") -1,
               tmp_sign1);
   hmac_sha256(tmp_sign1, 32, (void *)str_to_sign,
               (unsigned int)strlen(str_to_sign), tmp_sign0);
@@ -168,18 +188,19 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   }
   sha_str[64] = 0;
 
-  auth = curl_maprintf("Authorization: OSC4-HMAC-SHA256 Credential=%s/%s, "
+  auth = curl_maprintf("Authorization: %s4-HMAC-SHA256 Credential=%s/%s, "
                        "SignedHeaders=%s,"
                        " Signature=%s",
-                       data->set.str[STRING_USERNAME], cred_scope,
+                       up_provider, data->set.str[STRING_USERNAME], cred_scope,
                        signed_headers, sha_str);
 
+  free(signed_headers);
   free(str_to_sign);
   free(canonical_hdr);
   free(cred_scope);
   free(region);
   free(host);
-  curl_msprintf(date_str, "X-Osc-Date: %s", date_iso);
+  curl_msprintf(date_str, "X-%s-Date: %s", mid_provider, date_iso);
   data->set.headers = curl_slist_append(data->set.headers, date_str);
   data->set.headers = curl_slist_append(data->set.headers, auth);
   free(auth);

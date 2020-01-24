@@ -112,7 +112,7 @@ static const struct LongShort aliases[]= {
   {"*t", "proxy-ntlm",               ARG_BOOL},
   {"*u", "crlf",                     ARG_BOOL},
   {"*v", "stderr",                   ARG_FILENAME},
-  {"*V", "v4-signature",             ARG_BOOL},
+  {"*V", "v4-signature",             ARG_STRING},
   {"*w", "interface",                ARG_STRING},
   {"*x", "krb",                      ARG_STRING},
   {"*x", "krb4",                     ARG_STRING},
@@ -791,10 +791,8 @@ ParameterError getparameter(const char *flag, /* f or -long-flag */
         break;
 
       case 'V': /* --v4-signature */
-        if(toggle)
-          config->authtype |= CURLAUTH_SIGNATURE_V4;
-        else
-          config->authtype &= ~CURLAUTH_SIGNATURE_V4;
+        config->authtype |= CURLAUTH_SIGNATURE_V4;
+        GetStr(&config->v4_provider, nextarg);
         break;
       case 'v': /* --stderr */
         if(strcmp(nextarg, "-")) {

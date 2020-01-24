@@ -1941,6 +1941,9 @@ typedef enum {
   /* SASL authorisation identity */
   CINIT(SASL_AUTHZID, STRINGPOINT, 289),
 
+  /* Provider for V4 signature */
+  CINIT(V4_PROVIDER, STRINGPOINT, 290),
+
   CURLOPT_LASTENTRY /* the last unused */
 } CURLoption;
 
