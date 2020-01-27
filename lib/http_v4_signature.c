@@ -67,7 +67,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char *host;
   struct tm *info;
   time_t rawtime;
-  char *low_provider = data->set.str[STRING_V4_PROVIDER];
+  const char *provider = data->set.str[STRING_V4_PROVIDER];
+  char low_provider[REGION_MAX_L + 1];
   char up_provider[REGION_MAX_L + 1];
   char mid_provider[REGION_MAX_L + 1];
   char *region;
@@ -77,7 +78,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char date_str[64];
   const unsigned char *post_data = data->set.postfields ?
     data->set.postfields : "";
-  const char *content_type;
+  const char *content_type = Curl_checkheaders(conn, "Content-Type");
   unsigned char sha_d[32];
   char sha_str[65];
   char *cred_scope;
@@ -89,40 +90,62 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   unsigned char tmp_sign0[32];
   unsigned char tmp_sign1[32];
   char *auth;
+  char *tmp;
   int i;
 
+  printf("Post Data '%s'\n", post_data);
   if(Curl_checkheaders(conn, "Authorization")) {
     /* Authorization alerady present, Bailing out */
     goto exit;
   }
 
-  content_type = Curl_checkheaders(conn, "Content-Type");
-  if(!content_type) {
+  if(content_type) {
+    content_type = strchr(content_type, ':') + 1;
+    /* Skip whitespace now */
+    while(*content_type == ' ' || *content_type == '\t')
+      ++content_type;
+  }
+
+  tmp = strchr(provider, ':');
+  if(tmp) {
+    for(i = 0; provider != tmp; ++provider, ++i) {
+      if(i > REGION_MAX_L)
+        goto exit;
+      up_provider[i] = (char)toupper(*provider);
+    }
+    up_provider[i] = 0;
+    ++provider;
+    for(i = 0; *provider; ++provider, ++i) {
+      if(i > REGION_MAX_L)
+        goto exit;
+      low_provider[i] = (char)tolower(*provider);
+      mid_provider[i] = i ? low_provider[i] : (char)toupper(*provider);
+    }
+    low_provider[i] = 0;
+    mid_provider[i] = 0;
+  }
+  else if(strlen(provider) <= REGION_MAX_L) {
+    for(i = 0; provider[i]; ++i) {
+      low_provider[i] = (char)tolower(provider[i]);
+      up_provider[i] = (char)toupper(low_provider[i]);
+      mid_provider[i] = i ? low_provider[i] : up_provider[i];
+    }
+    low_provider[i] = 0;
+    up_provider[i] = 0;
+    mid_provider[i] = 0;
+  }
+  else {
     goto exit;
   }
-  content_type = strchr(content_type, ':') + 1;
-  /* Skip whitespace now */
-  while(*content_type == ' ' || *content_type == '\t')
-    ++content_type;
 
-  if(!low_provider || strlen(low_provider) > 3)
-    goto exit;
-
-  for(i = 0; low_provider[i]; ++i) {
-    if(!isalpha(low_provider[i]))
-      goto exit;
-    low_provider[i] = (char)tolower(low_provider[i]);
-    up_provider[i] = (char)toupper(low_provider[i]);
-    mid_provider[i] = (char)i ? low_provider[i] : up_provider[i];
-  }
-  up_provider[i] = 0;
-  mid_provider[i] = 0;
-
+  printf("%s %s %s\n", low_provider, up_provider, mid_provider);
   (void) proxy;
   time(&rawtime);
   info = localtime(&rawtime);
-  if(!strftime(date_iso, 256, "%Y%m%dT%H%M%SZ", info))
+  if(!strftime(date_iso, 256, "%Y%m%dT%H%M%SZ", info)) {
+    ret = CURLE_OUT_OF_MEMORY;
     goto exit;
+  }
   memcpy(date, date_iso, 8);
   date[8] = 0;
   region = strdup(strchr(surl, '.') + 1);
@@ -131,20 +154,29 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   host = strdup(surl);
   *strchr(host, '/') = 0;
 
+  curl_msprintf(request_type, "%s4_request", low_provider);
+  cred_scope = curl_maprintf("%s/%s/api/%s", date, region, request_type);
+  if(content_type) {
+    canonical_hdr = curl_maprintf(
+      "content-type:%s\n"
+      "host:%s\n"
+      "x-%s-date:%s\n", content_type, host, low_provider, date_iso);
+    signed_headers = curl_maprintf("content-type;host;x-%s-date",
+                                   low_provider);
+  }
+  else {
+    canonical_hdr = curl_maprintf(
+      "host:%s\n"
+      "x-%s-date:%s\n", host, low_provider, date_iso);
+    signed_headers = curl_maprintf("host;x-%s-date", low_provider);
+  }
+
+
   Curl_sha256it(sha_d, post_data);
   for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", sha_d[i]);
   }
   sha_str[64] = 0;
-
-  curl_msprintf(request_type, "%s4_request", low_provider);
-  cred_scope = curl_maprintf("%s/%s/api/%s", date, region, request_type);
-  canonical_hdr = curl_maprintf(
-    "content-type:%s\n"
-    "host:%s\n"
-    "x-%s-date:%s\n", content_type, host, low_provider, date_iso);
-
-  signed_headers = curl_maprintf("content-type;host;x-%s-date", low_provider);
 
   canonical_request = curl_maprintf(
                      "%s\n" /* Methode */
@@ -156,6 +188,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
                      customrequest,
                      uri, canonical_hdr, signed_headers, sha_str);
 
+  printf("%s\n", canonical_request);
   Curl_sha256it(sha_d, (unsigned char *)canonical_request);
   for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", sha_d[i]);
@@ -178,7 +211,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   hmac_sha256(tmp_sign0, 32, (void *)region,
               (unsigned int)strlen(region), tmp_sign1);
   hmac_sha256(tmp_sign1, 32, (void *)"api", sizeof("api") -1, tmp_sign0);
-  hmac_sha256(tmp_sign0, 32, (void *)request_type, sizeof("osc4_request") -1,
+  hmac_sha256(tmp_sign0, 32, (void *)request_type,
+              (unsigned int)strlen(request_type),
               tmp_sign1);
   hmac_sha256(tmp_sign1, 32, (void *)str_to_sign,
               (unsigned int)strlen(str_to_sign), tmp_sign0);
@@ -189,8 +223,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   sha_str[64] = 0;
 
   auth = curl_maprintf("Authorization: %s4-HMAC-SHA256 Credential=%s/%s, "
-                       "SignedHeaders=%s,"
-                       " Signature=%s",
+                       "SignedHeaders=%s, Signature=%s",
                        up_provider, data->set.str[STRING_USERNAME], cred_scope,
                        signed_headers, sha_str);
 
@@ -204,6 +237,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   data->set.headers = curl_slist_append(data->set.headers, date_str);
   data->set.headers = curl_slist_append(data->set.headers, auth);
   free(auth);
+  /* only send 1 request */
+  data->state.authhost.done = 1;
   ret = CURLE_OK;
 exit:
   return ret;
