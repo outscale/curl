@@ -68,6 +68,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   struct tm *info;
   time_t rawtime;
   const char *provider = data->set.str[STRING_V4_PROVIDER];
+  char low_provider0[REGION_MAX_L + 1];
   char low_provider[REGION_MAX_L + 1];
   char up_provider[REGION_MAX_L + 1];
   char mid_provider[REGION_MAX_L + 1];
@@ -93,7 +94,6 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char *tmp;
   int i;
 
-  printf("Post Data '%s'\n", post_data);
   if(Curl_checkheaders(conn, "Authorization")) {
     /* Authorization alerady present, Bailing out */
     goto exit;
@@ -112,8 +112,10 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
       if(i > REGION_MAX_L)
         goto exit;
       up_provider[i] = (char)toupper(*provider);
+      low_provider0[i] = (char)tolower(*provider);
     }
     up_provider[i] = 0;
+    low_provider0[i] = 0;
     ++provider;
     for(i = 0; *provider; ++provider, ++i) {
       if(i > REGION_MAX_L)
@@ -126,10 +128,12 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   }
   else if(strlen(provider) <= REGION_MAX_L) {
     for(i = 0; provider[i]; ++i) {
+      low_provider0[i] = (char)tolower(provider[i]);
       low_provider[i] = (char)tolower(provider[i]);
       up_provider[i] = (char)toupper(low_provider[i]);
       mid_provider[i] = i ? low_provider[i] : up_provider[i];
     }
+    low_provider0[i] = 0;
     low_provider[i] = 0;
     up_provider[i] = 0;
     mid_provider[i] = 0;
@@ -138,7 +142,6 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
     goto exit;
   }
 
-  printf("%s %s %s\n", low_provider, up_provider, mid_provider);
   (void) proxy;
   time(&rawtime);
   info = localtime(&rawtime);
@@ -154,7 +157,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   host = strdup(surl);
   *strchr(host, '/') = 0;
 
-  curl_msprintf(request_type, "%s4_request", low_provider);
+  curl_msprintf(request_type, "%s4_request", low_provider0);
   cred_scope = curl_maprintf("%s/%s/api/%s", date, region, request_type);
   if(content_type) {
     canonical_hdr = curl_maprintf(
