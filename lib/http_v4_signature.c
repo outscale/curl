@@ -191,7 +191,6 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
                      customrequest,
                      uri, canonical_hdr, signed_headers, sha_str);
 
-  printf("%s\n", canonical_request);
   Curl_sha256it(sha_d, (unsigned char *)canonical_request);
   for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", sha_d[i]);
