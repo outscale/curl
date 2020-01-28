@@ -74,6 +74,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char mid_provider[REGION_MAX_L + 1];
   char *region;
   char *uri;
+  char *query_url;
   char date_iso[17];
   char date[9];
   char date_str[64];
@@ -155,6 +156,9 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   *strchr(region, '.') = 0;
   uri = strchr(surl, '/');
   host = strdup(surl);
+  query_url = strchr(host, '?');
+  if(query_url)
+    *query_url = 0;
   tmp = strchr(host, '/');
   if(tmp)
     *tmp = 0;
@@ -169,12 +173,16 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
     signed_headers = curl_maprintf("content-type;host;x-%s-date",
                                    low_provider);
   }
-  else {
+  else if(query_url) {
+    query_url++;
+    printf("%s\n", query_url);
     canonical_hdr = curl_maprintf(
       "host:%s\n"
       "x-%s-date:%s\n", host, low_provider, date_iso);
     signed_headers = curl_maprintf("host;x-%s-date", low_provider);
   }
+  else
+    goto free_cred_scope;
 
 
   Curl_sha256it(sha_d, post_data);
@@ -186,13 +194,15 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   canonical_request = curl_maprintf(
                      "%s\n" /* Methode */
                      "%s\n" /* uri */
-                     "\n" /* querystring ? */
+                     "%s\n" /* querystring ? */
                      "%s\n" /* canonical_headers */
                      "%s\n" /* signed header */
                      "%s" /* SHA ! */,
-                     customrequest,
-                     uri, canonical_hdr, signed_headers, sha_str);
+                     customrequest, uri ? uri : "/",
+                     query_url ? query_url : "",
+                     canonical_hdr, signed_headers, sha_str);
 
+  printf("%s\n", canonical_request);
   Curl_sha256it(sha_d, (unsigned char *)canonical_request);
   for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", sha_d[i]);
@@ -234,7 +244,6 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   free(signed_headers);
   free(str_to_sign);
   free(canonical_hdr);
-  free(cred_scope);
   free(region);
   free(host);
   curl_msprintf(date_str, "X-%s-Date: %s", mid_provider, date_iso);
@@ -244,6 +253,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   /* only send 1 request */
   data->state.authhost.done = 1;
   ret = CURLE_OK;
+free_cred_scope:
+  free(cred_scope);
 exit:
   return ret;
 }

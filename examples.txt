@@ -9,3 +9,6 @@ curl  -X POST https://fcu.eu-west-2.outscale.com/ -H 'Content-Type: application/
 
 #another AWS call without insecure
 CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt curl -X POST https://eim.eu-west-2.outscale.com/ -H 'Content-Type: application/x-www-form-urlencoded' --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature "aws:amz"  --data-urlencode "Version=2020-01-24" --data-urlencode "Action=DeleteAccessKey" --data-urlencode "AccessKeyId=XXXXACCESSKEYXXXX"
+
+# AWS GET
+curl -X GET 'https://fcu.eu-west-2.outscale.com?Version=2020-01-24&Action=DescribeInstances' -k --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature  "aws:amz"
