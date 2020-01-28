@@ -155,7 +155,9 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   *strchr(region, '.') = 0;
   uri = strchr(surl, '/');
   host = strdup(surl);
-  *strchr(host, '/') = 0;
+  tmp = strchr(host, '/');
+  if(tmp)
+    *tmp = 0;
 
   curl_msprintf(request_type, "%s4_request", low_provider0);
   cred_scope = curl_maprintf("%s/%s/api/%s", date, region, request_type);
