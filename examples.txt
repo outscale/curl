@@ -1,11 +1,11 @@
 # ReadVms Outscale API
--X POST https://api.eu-west-2.outscale.com/api/latest/ReadVms   -H 'Content-Type:      application/json'   -H 'Accept: application/json'   --insecure --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature "osc" # --data "" is okay too
+curl -X POST https://api.eu-west-2.outscale.com/api/latest/ReadVms -H 'Content-Type:application/json' --insecure --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature "osc" # --data "" is okay too
 
 # ReadVms Outscale API with filters
--X POST https://api.eu-west-2.outscale.com/api/latest/ReadVms   -H 'Content-Type:      application/json'   -H 'Accept: application/json'   --insecure --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature "osc" --data '{"Filters" : { "VmIds" : [ "i-ca54d28e" ] } }'
+curl -X POST https://api.eu-west-2.outscale.com/api/latest/ReadVms -H 'Content-Type:  application/json' -k --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature "osc" --data '{"Filters" : { "VmIds" : [ "i-ca54d28e" ] } }'
 
 # AWS
--X POST https://fcu.eu-west-2.outscale.com/ -H 'Accept: application/x-www-form-urlencoded'  -H 'Content[uso@ip-10-9-21-198 curl]$  ./src/curl  -X POST https://fcu.eu-west-2.outscale.com/ -H 'Accept: application/x-www-form-urlencoded'  -H 'Content-Type: application/x-www-form-urlencoded'   --insecure --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX
+curl  -X POST https://fcu.eu-west-2.outscale.com/ -H 'Content-Type: application/x-www-form-urlencoded' --insecure --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature  "aws:amz" --data-urlencode "Version=2020-01-24" --data-urlencode "Action=DescribeInstances"
 
 #another AWS call without insecure
-CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt curl -X POST https://eim.eu-west-2.outscale.com/ -H 'Accept: application/x-www-form-urlencoded'  -H 'Content-Type: application/x-www-form-urlencoded' --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature "aws:amz"  --data-urlencode "Version=2020-01-24" --data-urlencode "Action=DeleteAccessKey" --data-urlencode "AccessKeyId=XXXXACCESSKEYXXXX"
+CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt curl -X POST https://eim.eu-west-2.outscale.com/ -H 'Content-Type: application/x-www-form-urlencoded' --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature "aws:amz"  --data-urlencode "Version=2020-01-24" --data-urlencode "Action=DeleteAccessKey" --data-urlencode "AccessKeyId=XXXXACCESSKEYXXXX"
