@@ -97,7 +97,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
 
   if(Curl_checkheaders(conn, "Authorization")) {
     /* Authorization alerady present, Bailing out */
-    goto exit;
+    goto out;
   }
 
   if(content_type) {
@@ -107,11 +107,14 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
       ++content_type;
   }
 
+  /* Get Parameter
+     Gogle and Outscale use the same OSC or GOOG,
+     but Amazone use AWS and AMZ for header arguments */
   tmp = strchr(provider, ':');
   if(tmp) {
     for(i = 0; provider != tmp; ++provider, ++i) {
       if(i > REGION_MAX_L)
-        goto exit;
+        goto out;
       up_provider[i] = (char)toupper(*provider);
       low_provider0[i] = (char)tolower(*provider);
     }
@@ -120,7 +123,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
     ++provider;
     for(i = 0; *provider; ++provider, ++i) {
       if(i > REGION_MAX_L)
-        goto exit;
+        goto out;
       low_provider[i] = (char)tolower(*provider);
       mid_provider[i] = i ? low_provider[i] : (char)toupper(*provider);
     }
@@ -140,7 +143,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
     mid_provider[i] = 0;
   }
   else {
-    goto exit;
+    goto out;
   }
 
   (void) proxy;
@@ -148,7 +151,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   info = localtime(&rawtime);
   if(!strftime(date_iso, 256, "%Y%m%dT%H%M%SZ", info)) {
     ret = CURLE_OUT_OF_MEMORY;
-    goto exit;
+    goto out;
   }
   memcpy(date, date_iso, 8);
   date[8] = 0;
@@ -175,7 +178,6 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   }
   else if(query_url) {
     query_url++;
-    printf("%s\n", query_url);
     canonical_hdr = curl_maprintf(
       "host:%s\n"
       "x-%s-date:%s\n", host, low_provider, date_iso);
@@ -202,7 +204,6 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
                      query_url ? query_url : "",
                      canonical_hdr, signed_headers, sha_str);
 
-  printf("%s\n", canonical_request);
   Curl_sha256it(sha_d, (unsigned char *)canonical_request);
   for(i = 0; i < 32; ++i) {
     curl_msprintf(sha_str + (i * 2), "%02x", sha_d[i]);
@@ -255,7 +256,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   ret = CURLE_OK;
 free_cred_scope:
   free(cred_scope);
-exit:
+out:
   return ret;
 }
 
