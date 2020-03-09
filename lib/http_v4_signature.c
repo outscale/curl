@@ -55,7 +55,7 @@ static CURLcode hmac_sha256(const unsigned char *key, unsigned int keylen,
   return CURLE_OK;
 }
 
-#define REGION_MAX_L 3
+#define PROVIDER_MAX_L 16
 
 CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
 {
@@ -68,10 +68,10 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   struct tm *info;
   time_t rawtime;
   const char *provider = data->set.str[STRING_V4_PROVIDER];
-  char low_provider0[REGION_MAX_L + 1];
-  char low_provider[REGION_MAX_L + 1];
-  char up_provider[REGION_MAX_L + 1];
-  char mid_provider[REGION_MAX_L + 1];
+  char low_provider0[PROVIDER_MAX_L + 1];
+  char low_provider[PROVIDER_MAX_L + 1];
+  char up_provider[PROVIDER_MAX_L + 1];
+  char mid_provider[PROVIDER_MAX_L + 1];
   char *region;
   char *uri;
   char *query_url;
@@ -85,7 +85,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char sha_str[65];
   char *cred_scope;
   char *signed_headers;
-  char request_type[REGION_MAX_L + sizeof("4_request")];
+  char request_type[PROVIDER_MAX_L + sizeof("4_request")];
   char *canonical_hdr;
   char *canonical_request;
   char *str_to_sign;
@@ -103,7 +103,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   if(content_type) {
     content_type = strchr(content_type, ':') + 1;
     /* Skip whitespace now */
-    while(*content_type == ' ' || *content_type == '\t')
+    while(isblank(*content_type))
       ++content_type;
   }
 
@@ -113,7 +113,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   tmp = strchr(provider, ':');
   if(tmp) {
     for(i = 0; provider != tmp; ++provider, ++i) {
-      if(i > REGION_MAX_L)
+      if(i > PROVIDER_MAX_L)
         goto out;
       up_provider[i] = (char)toupper(*provider);
       low_provider0[i] = (char)tolower(*provider);
@@ -122,7 +122,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
     low_provider0[i] = 0;
     ++provider;
     for(i = 0; *provider; ++provider, ++i) {
-      if(i > REGION_MAX_L)
+      if(i > PROVIDER_MAX_L)
         goto out;
       low_provider[i] = (char)tolower(*provider);
       mid_provider[i] = i ? low_provider[i] : (char)toupper(*provider);
@@ -130,7 +130,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
     low_provider[i] = 0;
     mid_provider[i] = 0;
   }
-  else if(strlen(provider) <= REGION_MAX_L) {
+  else if(strlen(provider) <= PROVIDER_MAX_L) {
     for(i = 0; provider[i]; ++i) {
       low_provider0[i] = (char)tolower(provider[i]);
       low_provider[i] = (char)tolower(provider[i]);
