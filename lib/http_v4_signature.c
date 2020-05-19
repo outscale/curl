@@ -108,7 +108,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   }
 
   /* Get Parameter
-     Gogle and Outscale use the same OSC or GOOG,
+     Google and Outscale use the same OSC or GOOG,
      but Amazone use AWS and AMZ for header arguments */
   tmp = strchr(provider, ':');
   if(tmp) {
@@ -148,7 +148,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
 
   (void) proxy;
   time(&rawtime);
-  info = localtime(&rawtime);
+  info = gmtime(&rawtime);
   if(!strftime(date_iso, 256, "%Y%m%dT%H%M%SZ", info)) {
     ret = CURLE_OUT_OF_MEMORY;
     goto out;
