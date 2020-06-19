@@ -75,6 +75,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   char *region;
   char *uri;
   char *query_url;
+  char *api_type;
   char date_iso[17];
   char date[9];
   char date_str[64];
@@ -155,6 +156,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   }
   memcpy(date, date_iso, 8);
   date[8] = 0;
+  api_type = strdup(surl);
+  *strchr(api_type, '.') = 0;
   region = strdup(strchr(surl, '.') + 1);
   *strchr(region, '.') = 0;
   uri = strchr(surl, '/');
@@ -167,7 +170,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
     *tmp = 0;
 
   curl_msprintf(request_type, "%s4_request", low_provider0);
-  cred_scope = curl_maprintf("%s/%s/api/%s", date, region, request_type);
+  cred_scope = curl_maprintf("%s/%s/%s/%s", date, region, api_type,
+                             request_type);
   if(content_type) {
     canonical_hdr = curl_maprintf(
       "content-type:%s\n"
@@ -225,7 +229,8 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
 
   hmac_sha256(tmp_sign0, 32, (void *)region,
               (unsigned int)strlen(region), tmp_sign1);
-  hmac_sha256(tmp_sign1, 32, (void *)"api", sizeof("api") -1, tmp_sign0);
+  hmac_sha256(tmp_sign1, 32, (void *)api_type,
+              (unsigned int)strlen(api_type), tmp_sign0);
   hmac_sha256(tmp_sign0, 32, (void *)request_type,
               (unsigned int)strlen(request_type),
               tmp_sign1);
@@ -246,6 +251,7 @@ CURLcode Curl_output_v4_signature(struct connectdata *conn, bool proxy)
   free(str_to_sign);
   free(canonical_hdr);
   free(region);
+  free(api_type);
   free(host);
   curl_msprintf(date_str, "X-%s-Date: %s", mid_provider, date_iso);
   data->set.headers = curl_slist_append(data->set.headers, date_str);

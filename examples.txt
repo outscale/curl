@@ -12,3 +12,6 @@ CURL_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt curl -X POST https://eim.eu-we
 
 # AWS GET
 curl -X GET 'https://fcu.eu-west-2.outscale.com?Version=2020-01-24&Action=DescribeInstances' -k --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature  "aws:amz"
+
+# amazone
+curl -X GET 'https://ec2.eu-west-3.amazonaws.com?Action=DescribeInstances&Version=2013-10-15' -k --user XXXXACCESSKEYXXXX:XXXXXXXXXSECRETKEYXXXXXXXXX --v4-signature  "aws:amz" -v
