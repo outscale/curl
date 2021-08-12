@@ -105,6 +105,9 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   unsigned char tmp_sign0[32] = {0};
   unsigned char tmp_sign1[32] = {0};
   char *auth_headers = NULL;
+  char *content_sha256;
+  char *content_sha256_canonical = NULL;
+  char *content_sha256_hdr = NULL;
 
   DEBUGASSERT(!proxy);
   (void)proxy;
@@ -249,6 +252,24 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   memcpy(date, timestamp, sizeof(date));
   date[sizeof(date) - 1] = 0;
 
+  content_sha256_hdr = curl_maprintf("X-%s-Content-Sha256", provider1_mid);
+  if(!content_sha256_hdr)
+    goto fail;
+  content_sha256 = Curl_checkheaders(data, content_sha256_hdr);
+
+  if(content_sha256) {
+    char *tmp = strchr(content_sha256, ':');
+
+    if(!tmp) {
+      infof(data, "X-Amz-Content-Sha256 bad header");
+      ret = CURLE_BAD_FUNCTION_ARGUMENT;
+      goto fail;
+    }
+    content_sha256_canonical = curl_maprintf("x-amz-content-sha256%s\n", tmp);
+    if(!content_sha256_canonical)
+      goto fail;
+  }
+
   if(content_type) {
     content_type = strchr(content_type, ':');
     if(!content_type) {
@@ -262,19 +283,30 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
 
     canonical_headers = curl_maprintf("content-type:%s\n"
                                       "host:%s\n"
+                                      "%s"
                                       "x-%s-date:%s\n",
                                       content_type,
                                       hostname,
+                                      content_sha256_canonical ?
+                                      content_sha256_canonical : "",
                                       provider1_low, timestamp);
-    signed_headers = curl_maprintf("content-type;host;x-%s-date",
+    signed_headers = curl_maprintf("content-type;host;%sx-%s-date",
+                                   content_sha256 ?
+                                   "x-amz-content-sha256;" : "",
                                    provider1_low);
   }
   else {
     canonical_headers = curl_maprintf("host:%s\n"
+                                      "%s"
                                       "x-%s-date:%s\n",
                                       hostname,
+                                      content_sha256_canonical ?
+                                      content_sha256_canonical : "",
                                       provider1_low, timestamp);
-    signed_headers = curl_maprintf("host;x-%s-date", provider1_low);
+    signed_headers = curl_maprintf("host;%sx-%s-date",
+                                   content_sha256 ?
+                                   "x-amz-content-sha256;" : "",
+                                   provider1_low);
   }
 
   if(!canonical_headers || !signed_headers) {
@@ -375,6 +407,8 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   ret = CURLE_OK;
 
 fail:
+  free(content_sha256_hdr);
+  free(content_sha256_canonical);
   free(provider0_low);
   free(provider0_up);
   free(provider1_low);
