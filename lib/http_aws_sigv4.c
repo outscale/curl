@@ -80,8 +80,9 @@ static bool urlchar_needs_escaping(int c, bool in_query)
            (in_query && c == '&'));
 }
 
+
 /*
- * strlen_uri() returns the length of the given URI
+ * encode_query_len() returns the length of the given URI
  * this fucntion is a modified version of strlen_url in urlapi.c
  */
 static size_t encode_query_len(const char *url, bool in_query)
@@ -107,6 +108,27 @@ static size_t encode_query_len(const char *url, bool in_query)
     }
   }
   return newlen;
+}
+
+static void decode_query_cpy(char *optr, const char *iptr)
+{
+  for(;
+       *iptr;
+       iptr++) {
+    if(*iptr == '%' && iptr[1] && iptr[2]) {
+      char num_str[3] = {iptr[1], iptr[2], 0};
+      long ascii_code;
+
+      ascii_code = strtol(num_str, NULL, 16);
+      if(ascii_code) {
+        *optr++ = (char)ascii_code;
+        iptr += 2;
+        continue;
+      }
+    }
+    *optr++=*iptr;
+  }
+  *optr = 0;
 }
 
 /* encode_query_cpy() copies a url to a output buffer and URL-encodes
@@ -136,7 +158,7 @@ static void encode_query_cpy(char *optr, const char *iptr, bool in_query)
       /* FALLTHROUGH */
     default:
       if(urlchar_needs_escaping(*iptr, in_query)) {
-        msnprintf(optr, 4, "%%%02X", *iptr);
+        msnprintf(optr, 4, "%%%02X", (const unsigned char)*iptr);
         optr += 3;
       }
       else
@@ -146,6 +168,25 @@ static void encode_query_cpy(char *optr, const char *iptr, bool in_query)
   }
   *optr = 0; /* null-terminate output buffer */
 
+}
+
+static char *new_encoded_url(const char *src, bool in_query)
+{
+  char *ret = NULL;
+  char *decoded_tmp = NULL;
+  size_t canonical_len = encode_query_len(src, in_query);
+
+  /* the size is not exact, but at worst, bigger of a few bytes */
+  decoded_tmp = malloc(canonical_len + 1);
+  if(!decoded_tmp)
+    return NULL;
+  decode_query_cpy(decoded_tmp, src);
+
+  ret = malloc(canonical_len + 1);
+  if(ret)
+    encode_query_cpy(ret, decoded_tmp, in_query);
+  free(decoded_tmp);
+  return ret;
 }
 
 CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
@@ -189,7 +230,6 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   unsigned char tmp_sign1[32] = {0};
   char *auth_headers = NULL;
   char *canonical_path = NULL;
-  size_t canonical_len;
   char *canonical_query_str = NULL;
 
   DEBUGASSERT(!proxy);
@@ -377,18 +417,14 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
 
   Curl_http_method(data, conn, &method, &httpreq);
 
-  canonical_len = encode_query_len(data->state.up.path, FALSE);
-  canonical_path = malloc(canonical_len + 1);
+  canonical_path = new_encoded_url(data->state.up.path, FALSE);
   if(!canonical_path)
     goto fail;
-  encode_query_cpy(canonical_path, data->state.up.path, FALSE);
 
   if(data->state.up.query) {
-    canonical_len = encode_query_len(data->state.up.query, TRUE);
-    canonical_query_str = malloc(canonical_len + 1);
+    canonical_query_str = new_encoded_url(data->state.up.query, TRUE);
     if(!canonical_query_str)
       goto fail;
-    encode_query_cpy(canonical_query_str, data->state.up.query, TRUE);
   }
 
   canonical_request =
