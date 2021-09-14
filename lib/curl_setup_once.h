@@ -268,6 +268,7 @@ struct timeval {
 #endif
 
 #define TOLOWER(x)  (tolower((int)  ((unsigned char)x)))
+#define TOUPPER(x)  (toupper((int)  ((unsigned char)x)))
 
 
 /*
