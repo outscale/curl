@@ -45,6 +45,7 @@
 #include "memdebug.h"
 #include "warnless.h"
 #include "slist.h"
+#include "escape.h"
 
 #define HMAC_SHA256(k, kl, d, dl, o)        \
   do {                                      \
@@ -68,157 +69,34 @@ static void sha256_to_hex(char *dst, unsigned char *sha, size_t dst_l)
   }
 }
 
-/*
- * Decide in an encoding-independent manner whether a character in an
- * URL must be escaped. The same criterion must be used in strlen_uri()
- * and strcpy_uri().
- */
-static bool urlchar_needs_escaping(int c, bool in_query)
-{
-  return !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_'
-           || c == '~' ||
-           (!in_query && c == '/') ||
-           (in_query && c == '&'));
-}
-
-
-/*
- * encode_query_len() returns the length of the given URI
- * this fucntion is a modified version of strlen_url in urlapi.c
- */
-static size_t encode_query_len(const char *url, bool in_query)
-{
-  const unsigned char *ptr = (unsigned char *)url;
-  size_t newlen = 0;
-  int count_equal = 0;
-
-  if(!*ptr)
-    return 0;
-
-  for(; *ptr; ptr++) {
-    switch (*ptr) {
-    case '=':
-      if(!in_query || count_equal++)
-        newlen += 2;
-      newlen++;
-      break;
-    default:
-      if(urlchar_needs_escaping(*ptr, in_query))
-        newlen += 2;
-      newlen++;
-    }
-  }
-  if(in_query && !count_equal)
-    newlen += 1;
-  return newlen;
-}
-
-static char *decode_query_cpy(char *optr, char *iptr, bool in_query)
-{
-  for(;
-       *iptr;
-       iptr++) {
-    if(in_query && *iptr == '&') {
-      ++iptr;
-      goto out;
-    }
-    if(*iptr == '%' && iptr[1] && iptr[2]) {
-      char num_str[3] = {iptr[1], iptr[2], 0};
-      long ascii_code;
-
-      ascii_code = strtoul(num_str, NULL, 16);
-      if(ascii_code) {
-        /* this long is never bigger than 255 anyway */
-        *optr++ = curlx_ultouc(ascii_code);
-        iptr += 2;
-        continue;
-      }
-    }
-    *optr++=*iptr;
-  }
-out:
-  *optr = 0;
-  return iptr;
-}
-
-/* encode_query_cpy() copies a url to a output buffer and URL-encodes
- * the URI acordingly
- * this fucntion is a modified version of strcpy_url in urlapi.c
- */
-static void encode_query_cpy(char *optr, const char *iptr, bool in_query)
-{
-  /* we must add this with whitespace-replacing */
-  int count_equal = 0;
-
-  for(;
-      *iptr;         /* until zero byte */
-      iptr++) {
-
-    switch(*iptr) {
-    case '=':
-      if(!in_query || count_equal++) {
-        msnprintf(optr, 4, "%%%02X", *iptr);
-        optr += 3;
-      }
-      else
-        *optr++=*iptr;
-      break;
-    default:
-      if(urlchar_needs_escaping(*iptr, in_query)) {
-        msnprintf(optr, 4, "%%%02X", (const unsigned char)*iptr);
-        optr += 3;
-      }
-      else
-        *optr++=*iptr;
-      break;
-    }
-  }
-  if(in_query && !count_equal)
-    *optr++= '=';
-  *optr = 0; /* null-terminate output buffer */
-}
-
-static char *new_encoded_url(char **src, bool in_query)
-{
-  char *ret = NULL;
-  char *decoded_tmp = NULL;
-  size_t canonical_len = encode_query_len(*src, in_query);
-  char *tmp;
-
-  if(!canonical_len)
-    return NULL;
-  /* the size is not exact, but at worst, bigger of a few bytes */
-  decoded_tmp = malloc(canonical_len + 1);
-  if(!decoded_tmp)
-    return NULL;
-  tmp = decode_query_cpy(decoded_tmp, *src, in_query);
-  if(in_query && tmp)
-    *src = tmp;
-
-  ret = malloc(canonical_len + 1);
-  if(ret)
-    encode_query_cpy(ret, decoded_tmp, in_query);
-  free(decoded_tmp);
-  return ret;
-}
-
-static char *new_encoded_query_url(char *src)
+static int set_query(CURLU *curlu, struct dynbuf *query_str)
 {
   struct curl_slist *query_list = NULL;
-  char *reenc = NULL;
-  char *ret = NULL;
+  char *query, *query_begin;
+  char *end = NULL;
+  int ret = CURLUE_OUT_OF_MEMORY;
   struct curl_slist *l;
   int again;
 
-  while((reenc = new_encoded_url(&src, TRUE))) {
-    l = Curl_slist_append_nodup(query_list, reenc);
+  ret = curl_url_get(curlu, CURLUPART_QUERY, &query_begin, 0);
+  if(ret != CURLUE_OK)
+    return ret;
+  ret = CURLUE_OUT_OF_MEMORY;
+  query = query_begin;
+
+append_query:
+    end = strchr(query, '&');
+    if(end)
+      *end = 0;
+    l = curl_slist_append(query_list, query);
     if(!l) {
-      free(reenc);
       goto out;
     }
     query_list = l;
-  }
+    if(end) {
+      query = end + 1;
+      goto append_query;
+    }
 
   /* reorder */
   for(again = 1; again;) {
@@ -237,13 +115,18 @@ static char *new_encoded_query_url(char *src)
   }
 
   for(l = query_list; l; l = l->next) {
-    char *tmp = ret;
-
-    ret = curl_maprintf("%s%s%s", ret ? ret : "", ret ? "&": "", l->data);
-    free(tmp);
+    if(Curl_dyn_add(query_str, l->data))
+      goto out;
+    if(l->next) {
+      if(Curl_dyn_add(query_str, "&"))
+        goto out;
+    }
   }
 
+  ret = 0;
+
 out:
+  curl_free(query_begin);
   curl_slist_free_all(query_list);
   return ret;
 }
@@ -289,15 +172,10 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   unsigned char tmp_sign1[32] = {0};
   char *auth_headers = NULL;
   char *canonical_path = NULL;
-  char *canonical_query_str = NULL;
-  CURLU *curlu = curl_url();
+  char *decoded_url = NULL;
+  struct dynbuf canonical_query_str;
+  CURLU *curlu = NULL;
 
-  curl_url_set(curlu, CURLUPART_URL, data->state.url,
-               CURLU_DECODE_UPPERCASE | CURLU_URLDECODE | CURLU_URLDECODE);
-
-  char *tmp;
-  curl_url_get(curlu, CURLUPART_URL, &tmp,
-               CURLU_DECODE_UPPERCASE | CURLU_URLDECODE | CURLU_URLENCODE);
   DEBUGASSERT(!proxy);
   (void)proxy;
 
@@ -305,6 +183,9 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
     /* Authorization already present, Bailing out */
     return CURLE_OK;
   }
+
+  curlu = curl_url();
+  Curl_dyn_init(&canonical_query_str, DYN_HTTP_REQUEST);
 
   /*
    * Parameters parsing
@@ -435,6 +316,7 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   if(ret != CURLE_OK) {
     goto fail;
   }
+  ret = CURLE_OUT_OF_MEMORY;
   if(!strftime(timestamp, sizeof(timestamp), "%Y%m%dT%H%M%SZ", &tm)) {
     goto fail;
   }
@@ -486,16 +368,26 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
 
   Curl_http_method(data, conn, &method, &httpreq);
 
-  (void)curlu;
-  canonical_path = new_encoded_url(&data->state.up.path, FALSE);
+  ret = Curl_urldecode(NULL, data->state.url, 0, &decoded_url, NULL,
+                       REJECT_CTRL);
+  if(ret != CURLE_OK)
+    goto fail;
+  ret = CURLE_OUT_OF_MEMORY;
+
+  curl_url_set(curlu, CURLUPART_URL, decoded_url,
+               CURLU_ENCODE_UPPERCASE | CURLU_URLENCODE);
+
+  if(data->state.up.query) {
+    int query_ret = set_query(curlu, &canonical_query_str);
+
+    if(query_ret != CURLUE_OK)
+      goto fail;
+  }
+
+  curl_url_get(curlu, CURLUPART_PATH, &canonical_path, 0);
   if(!canonical_path)
     goto fail;
 
-  if(data->state.up.query) {
-    canonical_query_str = new_encoded_query_url(data->state.up.query);
-    if(!canonical_query_str)
-      goto fail;
-  }
 
   canonical_request =
     curl_maprintf("%s\n" /* HTTPRequestMethod */
@@ -506,7 +398,8 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
                   "%s",  /* HashedRequestPayload in hex */
                   method,
                   canonical_path,
-                  data->state.up.query ? canonical_query_str : "",
+                  data->state.up.query ?
+                  Curl_dyn_ptr(&canonical_query_str) : "",
                   canonical_headers,
                   signed_headers,
                   sha_hex);
@@ -603,7 +496,9 @@ fail:
   free(str_to_sign);
   free(secret);
   free(canonical_path);
-  free(canonical_query_str);
+  free(decoded_url);
+  curl_url_cleanup(curlu);
+  Curl_dyn_free(&canonical_query_str);
   return ret;
 }
 

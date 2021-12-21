@@ -193,7 +193,7 @@ static void strcpy_url(char *output, const char *url, int flag)
   /* we must add this with whitespace-replacing */
   bool left = TRUE;
   bool relative = flag & STRCPY_URL_RELATIVE;
-  bool upercase = !!(flag & CURLU_DECODE_UPPERCASE);
+  bool upercase = !!(flag & CURLU_ENCODE_UPPERCASE);
   const unsigned char *iptr;
   char *optr = output;
   const unsigned char *host_sep = (const unsigned char *) url;
@@ -1031,7 +1031,7 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
     path_alloced = TRUE;
     strcpy_url(newp, path,
                STRCPY_URL_RELATIVE |  /* consider it relative */
-               (flags & CURLU_DECODE_UPPERCASE));
+               (flags & CURLU_ENCODE_UPPERCASE));
     u->temppath = path = newp;
   }
 

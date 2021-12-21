@@ -95,8 +95,6 @@ typedef enum {
 #define CURLU_ALLOW_SPACE (1<<11)       /* Allow spaces in the URL */
 
 #define CURLU_ENCODE_UPPERCASE (1<<12)  /* Encode URL using uppercase hex */
-#define CURLU_ENCODE_DECODE_QUERY (1<<13)        /* enable the encoding/decoding of the query string */
-#define CURLU_SORT_QUERY (1<<14)        /* Sort Query on set */
 
 typedef struct Curl_URL CURLU;
 
