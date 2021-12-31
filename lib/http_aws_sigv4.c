@@ -79,6 +79,84 @@ static inline char *find_date_hdr(struct Curl_easy *data, const char *sig_hdr)
   return Curl_checkheaders(data, "Date");
 }
 
+static CURLcode make_payload_sha256(struct Curl_easy *data,
+                                    const char *provider1_mid,
+                                    const char *service,
+                                    char *sha_hex,
+                                    size_t sha_hex_size)
+{
+  char *payload_hdr_key = curl_maprintf("X-%s-Content-Sha256", provider1_mid);
+  char *payload_hdr_full = NULL;
+  const char *payload_hdr = NULL;
+  const char *post_data = data->set.postfields;
+  bool need_header = (strcasecmp(service, "s3") == 0);
+  unsigned char sha_hash[32];
+  int ret = CURLE_OUT_OF_MEMORY;
+
+  if(!payload_hdr_key)
+    goto fail;
+
+  payload_hdr = Curl_checkheaders(data, payload_hdr_key);
+
+  /* User provided payload hash at his own */
+  if(payload_hdr) {
+    payload_hdr = strchr(payload_hdr, ':');
+    if(payload_hdr) {
+      do {
+        ++payload_hdr;
+      } while(*payload_hdr == ' ' || *payload_hdr == '\t');
+
+      strncpy(sha_hex, payload_hdr, sha_hex_size);
+
+      ret = CURLE_OK;
+      goto fail;
+    }
+  }
+
+  /* Try to evaluate payload hash on our own */
+  if(post_data) {
+    const size_t post_data_len = (data->set.postfieldsize < 0 ?
+                                  strlen(post_data) :
+                                  (size_t)data->set.postfieldsize);
+
+    Curl_sha256it(sha_hash,
+                  (const unsigned char *) post_data, post_data_len);
+    sha256_to_hex(sha_hex, sha_hash, sha_hex_size);
+  }
+  else if(data->set.fread_func_set) {
+    /* We cannot evaluate payload hash  */
+    strncpy(sha_hex, "UNSIGNED-PAYLOAD", sha_hex_size);
+    need_header = true;
+  }
+  else {
+    /* Use the empty SHA otherwise */
+    strncpy(sha_hex,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            sha_hex_size);
+  }
+
+  if(need_header) {
+    struct curl_slist *tmp_head = NULL;
+
+    /* Append the header */
+    payload_hdr_full = curl_maprintf("%s: %s", payload_hdr_key, sha_hex);
+    if(!payload_hdr_full)
+      goto fail;
+
+    tmp_head = curl_slist_append(data->set.headers, payload_hdr_full);
+    if(!tmp_head)
+      goto fail;
+    data->set.headers = tmp_head;
+  }
+
+  ret = CURLE_OK;
+fail:
+  free(payload_hdr_key);
+  free(payload_hdr_full);
+
+  return ret;
+}
+
 static CURLcode make_headers(struct Curl_easy *data,
                              const char *hostname,
                              char *timestamp,
@@ -278,8 +356,6 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   char *date_header = NULL;
   Curl_HttpReq httpreq;
   const char *method;
-  size_t post_data_len;
-  const char *post_data = data->set.postfields ? data->set.postfields : "";
   unsigned char sha_hash[32];
   char sha_hex[65];
   char *canonical_request = NULL;
@@ -440,6 +516,11 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
     goto fail;
   }
 
+  if((ret = make_payload_sha256(data, provider1_mid, service,
+                                sha_hex,
+                                sizeof(sha_hex))) != CURLE_OK)
+    goto fail;
+
   if((ret = make_headers(data, hostname, timestamp,
                          provider1_low, provider1_mid,
                          &date_header,
@@ -450,17 +531,6 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
 
   memcpy(date, timestamp, sizeof(date));
   date[sizeof(date) - 1] = 0;
-
-  if(data->set.postfieldsize < 0)
-    post_data_len = strlen(post_data);
-  else
-    post_data_len = (size_t)data->set.postfieldsize;
-  if(Curl_sha256it(sha_hash, (const unsigned char *) post_data,
-                   post_data_len)) {
-    goto fail;
-  }
-
-  sha256_to_hex(sha_hex, sha_hash, sizeof(sha_hex));
 
   Curl_http_method(data, conn, &method, &httpreq);
 
