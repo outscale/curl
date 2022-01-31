@@ -54,6 +54,8 @@
 /* scheme is not URL encoded, the longest libcurl supported ones are... */
 #define MAX_SCHEME_LEN 40
 
+#define STRCPY_URL_RELATIVE 1
+
 /* Internal representation of CURLU. Point to URL-encoded strings. */
 struct Curl_URL {
   char *scheme;
@@ -129,7 +131,7 @@ static const char *find_host_sep(const char *url)
 }
 
 /*
- * Decide in an encoding-independent manner whether a character in an
+ * Decide in an esncoding-independent manner whether a character in an
  * URL must be escaped. The same criterion must be used in strlen_url()
  * and strcpy_url().
  */
@@ -186,10 +188,12 @@ static size_t strlen_url(const char *url, bool relative)
  * URL encoding should be skipped for host names, otherwise IDN resolution
  * will fail.
  */
-static void strcpy_url(char *output, const char *url, bool relative)
+static void strcpy_url(char *output, const char *url, int flag)
 {
   /* we must add this with whitespace-replacing */
   bool left = TRUE;
+  bool relative = flag & STRCPY_URL_RELATIVE;
+  bool upercase = !!(flag & CURLU_DECODE_UPPERCASE);
   const unsigned char *iptr;
   char *optr = output;
   const unsigned char *host_sep = (const unsigned char *) url;
@@ -221,7 +225,10 @@ static void strcpy_url(char *output, const char *url, bool relative)
       left = FALSE;
 
     if(urlchar_needs_escaping(*iptr)) {
-      msnprintf(optr, 4, "%%%02x", *iptr);
+      if(upercase)
+        msnprintf(optr, 4, "%%%02X", *iptr);
+      else
+        msnprintf(optr, 4, "%%%02x", *iptr);
       optr += 3;
     }
     else
@@ -1022,7 +1029,9 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
     if(!newp)
       return CURLUE_OUT_OF_MEMORY;
     path_alloced = TRUE;
-    strcpy_url(newp, path, TRUE); /* consider it relative */
+    strcpy_url(newp, path,
+               STRCPY_URL_RELATIVE |  /* consider it relative */
+               (flags & CURLU_DECODE_UPPERCASE));
     u->temppath = path = newp;
   }
 

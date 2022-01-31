@@ -290,7 +290,14 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   char *auth_headers = NULL;
   char *canonical_path = NULL;
   char *canonical_query_str = NULL;
+  CURLU *curlu = curl_url();
 
+  curl_url_set(curlu, CURLUPART_URL, data->state.url,
+               CURLU_DECODE_UPPERCASE | CURLU_URLDECODE | CURLU_URLDECODE);
+
+  char *tmp;
+  curl_url_get(curlu, CURLUPART_URL, &tmp,
+               CURLU_DECODE_UPPERCASE | CURLU_URLDECODE | CURLU_URLENCODE);
   DEBUGASSERT(!proxy);
   (void)proxy;
 
@@ -479,6 +486,7 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
 
   Curl_http_method(data, conn, &method, &httpreq);
 
+  (void)curlu;
   canonical_path = new_encoded_url(&data->state.up.path, FALSE);
   if(!canonical_path)
     goto fail;
