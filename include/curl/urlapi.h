@@ -86,7 +86,7 @@ typedef enum {
 #define CURLU_NON_SUPPORT_SCHEME (1<<3) /* allow non-supported scheme */
 #define CURLU_PATH_AS_IS (1<<4)         /* leave dot sequences */
 #define CURLU_DISALLOW_USER (1<<5)      /* no user+password allowed */
-#define CURLU_URLDECODE (1<<6)          /* URL decode on get, or on set on query if CURLU_ENCODE_DECODE_QUERY is set */
+#define CURLU_URLDECODE (1<<6)          /* URL decode on get */
 #define CURLU_URLENCODE (1<<7)          /* URL encode on set */
 #define CURLU_APPENDQUERY (1<<8)        /* append a form style part */
 #define CURLU_GUESS_SCHEME (1<<9)       /* legacy curl-style guessing */

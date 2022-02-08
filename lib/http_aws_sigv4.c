@@ -117,6 +117,11 @@ append_query:
   for(l = query_list; l; l = l->next) {
     if(Curl_dyn_add(query_str, l->data))
       goto out;
+
+    if(!strchr(l->data, '='))
+      if(Curl_dyn_add(query_str, "="))
+        goto out;
+
     if(l->next) {
       if(Curl_dyn_add(query_str, "&"))
         goto out;
