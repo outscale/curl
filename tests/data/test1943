@@ -47,7 +47,7 @@ lib%TESTNUMBER
 </tool>
 
 <command>
-http://%HOSTIP:%HTTPPORT/%TESTNUMBER/testapi/test===カールロックス_курл_рокс_!!!====%2b%
+http://%HOSTIP:%HTTPPORT/%TESTNUMBER/testapi/test===カールロックス_курл_рокс_!!!*====%2b%
 </command>
 </client>
 

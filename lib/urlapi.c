@@ -135,8 +135,10 @@ static const char *find_host_sep(const char *url)
  * URL must be escaped. The same criterion must be used in strlen_url()
  * and strcpy_url().
  */
-static bool urlchar_needs_escaping(int c)
+static bool urlchar_needs_escaping(unsigned char c, bool check_unreserved)
 {
+  if(check_unreserved)
+    return !(Curl_isunreserved(c) || c == '/');
   return !(ISCNTRL(c) || ISSPACE(c) || ISGRAPH(c));
 }
 
@@ -146,12 +148,15 @@ static bool urlchar_needs_escaping(int c)
  * URL encoding should be skipped for host names, otherwise IDN resolution
  * will fail.
  */
-static size_t strlen_url(const char *url, bool relative)
+static size_t strlen_url(const char *url, int flags)
 {
   const unsigned char *ptr;
+  bool relative = flags & STRCPY_URL_RELATIVE;
+  bool check_unreserved = !!(flags & CURLU_ENCODE_UNRESERVED);
   size_t newlen = 0;
   bool left = TRUE; /* left side of the ? */
   const unsigned char *host_sep = (const unsigned char *) url;
+  bool need_escape;
 
   if(!relative)
     host_sep = (const unsigned char *) find_host_sep(url);
@@ -174,7 +179,8 @@ static size_t strlen_url(const char *url, bool relative)
     if (*ptr == '?')
       left = FALSE;
 
-    if(urlchar_needs_escaping(*ptr))
+    need_escape = urlchar_needs_escaping(*ptr, check_unreserved);
+    if(need_escape)
       newlen += 2;
 
     newlen++;
@@ -188,15 +194,17 @@ static size_t strlen_url(const char *url, bool relative)
  * URL encoding should be skipped for host names, otherwise IDN resolution
  * will fail.
  */
-static void strcpy_url(char *output, const char *url, int flag)
+static void strcpy_url(char *output, const char *url, int flags)
 {
   /* we must add this with whitespace-replacing */
   bool left = TRUE;
-  bool relative = flag & STRCPY_URL_RELATIVE;
-  bool upercase = !!(flag & CURLU_ENCODE_UPPERCASE);
+  bool relative = flags & STRCPY_URL_RELATIVE;
+  bool upercase = !!(flags & CURLU_ENCODE_UPPERCASE);
+  bool check_unreserved = !!(flags & CURLU_ENCODE_UNRESERVED);
   const unsigned char *iptr;
   char *optr = output;
   const unsigned char *host_sep = (const unsigned char *) url;
+  bool need_escape;
 
   if(!relative)
     host_sep = (const unsigned char *) find_host_sep(url);
@@ -224,7 +232,9 @@ static void strcpy_url(char *output, const char *url, int flag)
     if(*iptr == '?')
       left = FALSE;
 
-    if(urlchar_needs_escaping(*iptr)) {
+    need_escape = urlchar_needs_escaping(*iptr, check_unreserved);
+
+    if(need_escape) {
       if(upercase)
         msnprintf(optr, 4, "%%%02X", *iptr);
       else
@@ -283,7 +293,7 @@ bool Curl_is_absolute_url(const char *url, char *buf, size_t buflen)
  * The returned pointer must be freed by the caller unless NULL
  * (returns NULL on out of memory).
  */
-static char *concat_url(const char *base, const char *relurl)
+static char *concat_url(const char *base, const char *relurl, int flags)
 {
   /***
    TRY to append this new path to the old URL
@@ -407,7 +417,8 @@ static char *concat_url(const char *base, const char *relurl)
      letter we replace each space with %20 while it is replaced with '+'
      on the right side of the '?' letter.
   */
-  newlen = strlen_url(useurl, !host_changed);
+  newlen = strlen_url(useurl, (!host_changed) |
+                      (flags & CURLU_ENCODE_UNRESERVED));
 
   urllen = strlen(url_clone);
 
@@ -1031,7 +1042,8 @@ static CURLUcode seturl(const char *url, CURLU *u, unsigned int flags)
     path_alloced = TRUE;
     strcpy_url(newp, path,
                STRCPY_URL_RELATIVE |  /* consider it relative */
-               (flags & CURLU_ENCODE_UPPERCASE));
+               (flags & (CURLU_ENCODE_UPPERCASE |
+                         CURLU_ENCODE_UNRESERVED)));
     u->temppath = path = newp;
   }
 
@@ -1602,7 +1614,7 @@ CURLUcode curl_url_set(CURLU *u, CURLUPart what,
     }
 
     /* apply the relative part to create a new URL */
-    redired_url = concat_url(oldurl, part);
+    redired_url = concat_url(oldurl, part, flags);
     free(oldurl);
     if(!redired_url)
       return CURLUE_OUT_OF_MEMORY;

@@ -180,6 +180,7 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
   char *decoded_url = NULL;
   struct dynbuf canonical_query_str;
   CURLU *curlu = NULL;
+  int decode_level = 2;
 
   DEBUGASSERT(!proxy);
   (void)proxy;
@@ -373,14 +374,33 @@ CURLcode Curl_output_aws_sigv4(struct Curl_easy *data, bool proxy)
 
   Curl_http_method(data, conn, &method, &httpreq);
 
-  ret = Curl_urldecode(NULL, data->state.url, 0, &decoded_url, NULL,
+  ret = Curl_urldecode(NULL, data->state.up.path, 0, &decoded_url, NULL,
                        REJECT_CTRL);
   if(ret != CURLE_OK)
     goto fail;
   ret = CURLE_OUT_OF_MEMORY;
 
-  curl_url_set(curlu, CURLUPART_URL, decoded_url,
-               CURLU_ENCODE_UPPERCASE | CURLU_URLENCODE);
+
+  /* set url */
+  /* set path and querry manually */
+  curl_url_set(curlu, CURLUPART_PATH, decoded_url,
+               CURLU_ENCODE_UPPERCASE | CURLU_ENCODE_UNRESERVED |
+               CURLU_URLENCODE);
+
+  curl_url_set(curlu, CURLUPART_QUERY, data->state.up.query,
+               CURLU_ENCODE_UPPERCASE | CURLU_ENCODE_UNRESERVED |
+               CURLU_URLENCODE);
+
+
+  if(decode_level > 1) {
+    curl_url_get(curlu, CURLUPART_PATH, &canonical_path, 0);
+
+    curl_url_set(curlu, CURLUPART_PATH, canonical_path,
+                 CURLU_ENCODE_UPPERCASE | CURLU_ENCODE_UNRESERVED |
+                 CURLU_URLENCODE);
+    free(canonical_path);
+    canonical_path = NULL;
+  }
 
   if(data->state.up.query) {
     int query_ret = set_query(curlu, &canonical_query_str);
