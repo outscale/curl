@@ -10,7 +10,7 @@
 [![Language Grade: C/C++](https://img.shields.io/lgtm/grade/cpp/g/curl/curl.svg?logo=lgtm&logoWidth=18)](https://lgtm.com/projects/g/curl/curl/context:cpp)
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d11483a0cc5c4ebd9da4ff9f7cd56690)](https://www.codacy.com/app/curl/curl?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=curl/curl&amp;utm_campaign=Badge_Grade)
 [![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/curl.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:curl)
-[![Project Graduated](https://docs.outscale.com/fr/userguide/_images/Project-Graduated-green.svg)](https://docs.outscale.com/en/userguide/Open-Source-Projects.html)
+[![Project Archived](https://docs.outscale.com/fr/userguide/_images/Project-Archived-red.svg)](https://docs.outscale.com/en/userguide/Open-Source-Projects.html)
 
 Curl is a command-line tool for transferring data specified with URL
 syntax. Find out how to use curl by reading [the curl.1 man
